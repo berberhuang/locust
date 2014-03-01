@@ -4,6 +4,7 @@ import traceback
 import warnings
 import random
 import logging
+import os
 from time import time
 from hashlib import md5
 
@@ -28,6 +29,7 @@ SLAVE_REPORT_INTERVAL = 3.0
 
 class LocustRunner(object):
     def __init__(self, locust_classes, options):
+        self.locust_classes_definition=open(options.locustfile).read() if options.locustfile else None
         self.locust_classes = locust_classes
         self.hatch_rate = options.hatch_rate
         self.num_clients = options.num_clients
@@ -236,7 +238,7 @@ class MasterLocustRunner(DistributedLocustRunner):
             @property
             def running(self):
                 return self.get_by_state(STATE_RUNNING)
-        
+
         self.clients = SlaveNodesDict()
         
         self.client_stats = {}
@@ -284,6 +286,7 @@ class MasterLocustRunner(DistributedLocustRunner):
         
         for client in self.clients.itervalues():
             data = {
+                "locust_classes_definition":self.locust_classes_definition,
                 "locust_classes":pickle.dumps(self.locust_classes),
                 "hatch_rate":slave_hatch_rate,
                 "num_clients":slave_num_clients,
@@ -386,7 +389,13 @@ class SlaveLocustRunner(DistributedLocustRunner):
         while True:
             msg = self.client.recv()
             if msg.type == "hatch":
+                locust_classes_definition_str=msg.data['locust_classes_definition']
+
+                open('test_config.py','w').write(locust_classes_definition_str)
+                import test_config
+                
                 self.locust_classes=pickle.loads(msg.data['locust_classes'])
+
                 self.client.send(Message("hatching", None, self.client_id))
                 job = msg.data
                 self.hatch_rate = job["hatch_rate"]
