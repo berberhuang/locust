@@ -7,6 +7,7 @@ import logging
 from time import time
 from hashlib import md5
 
+import pickle
 import gevent
 from gevent import GreenletExit
 from gevent.pool import Group
@@ -220,7 +221,6 @@ class SlaveNode(object):
 class MasterLocustRunner(DistributedLocustRunner):
     def __init__(self, *args, **kwargs):
         super(MasterLocustRunner, self).__init__(*args, **kwargs)
-        
         class SlaveNodesDict(dict):
             def get_by_state(self, state):
                 return [c for c in self.itervalues() if c.state == state]
@@ -246,7 +246,7 @@ class MasterLocustRunner(DistributedLocustRunner):
         self.server = rpc.Server(self.master_bind_host, self.master_bind_port)
         self.greenlet = Group()
         self.greenlet.spawn(self.client_listener).link_exception(callback=self.noop)
-        
+
         # listener that gathers info on how many locust users the slaves has spawned
         def on_slave_report(client_id, data):
             self.clients[client_id].user_count = data["user_count"]
@@ -284,6 +284,7 @@ class MasterLocustRunner(DistributedLocustRunner):
         
         for client in self.clients.itervalues():
             data = {
+                "locust_classes":pickle.dumps(self.locust_classes),
                 "hatch_rate":slave_hatch_rate,
                 "num_clients":slave_num_clients,
                 "num_requests": self.num_requests,
@@ -385,6 +386,7 @@ class SlaveLocustRunner(DistributedLocustRunner):
         while True:
             msg = self.client.recv()
             if msg.type == "hatch":
+                self.locust_classes=pickle.loads(msg.data['locust_classes'])
                 self.client.send(Message("hatching", None, self.client_id))
                 job = msg.data
                 self.hatch_rate = job["hatch_rate"]
